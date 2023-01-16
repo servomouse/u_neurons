@@ -26,15 +26,15 @@ typedef struct _network_t
     int n_inputs;
     int n_outputs;
     int n_neurons;
-    neuron_t * network;
+    neuron_t ** network;
     FLOAT * outputs;
 }network_t;
 
 network_t * net = NULL;
 
-static void create_neuron(neuron_t *n, int num_of_inputs, int first_input_index)
+static neuron_t * create_neuron(int num_of_inputs, int first_input_index)
 {
-    n = (neuron_t *)malloc(sizeof(neuron_t));
+    neuron_t *n = (neuron_t *)malloc(sizeof(neuron_t));
     n->num_of_inputs = num_of_inputs;
     n->inputs = (int*)malloc(sizeof(int)*num_of_inputs);
     n->i_values = (FLOAT*)malloc(sizeof(FLOAT)*num_of_inputs);
@@ -47,6 +47,7 @@ static void create_neuron(neuron_t *n, int num_of_inputs, int first_input_index)
         n->inputs[i] = first_input_index + i;   // set inputs indexes
     }
     n->bias = get_random();
+    return n;
 }
 
 static void delete_neuron(neuron_t * n)
@@ -102,7 +103,7 @@ void create_network(int n_layers, ...)
         return;
     net = (network_t*)calloc(sizeof(network_t), 1);
 
-    int layers[128] = {[0 ... 63] = -1, [64 ... 127] = 8};
+    int layers[128] = {[0 ... 127] = -1};
 
     va_list ptr;
     va_start(ptr, n_layers);
@@ -110,8 +111,46 @@ void create_network(int n_layers, ...)
     {
         layers[i] = va_arg(ptr, int);
         net->n_neurons += layers[i];
+        net->n_outputs = layers[i];
     }
+    net->n_inputs = layers[0];
     va_end(ptr);
+    net->network = (neuron_t**)malloc(sizeof(neuron_t*) * net->n_neurons);
+    net->outputs = (FLOAT*)malloc(sizeof(FLOAT) * net->n_outputs);
+    int index = 0, pointer = 0;
+    for(int i=0; i<layers[0]; i++)
+        net->network[pointer++] = create_neuron(0, 0);
+    for(int i=1; i<n_layers; i++)
+    {
+        for(int j=0; j<layers[i]; j++)
+            net->network[pointer++] = create_neuron(layers[i-1], index);
+        index += layers[i-1];
+    }
+}
 
+// params: inputs - input data;
+// outputs - expected output data
+void train_network(FLOAT * inputs, FLOAT * outputs, FLOAT coefficient)
+{
+    for(int i=0; i<net->n_inputs; i++)  // set inputs values
+        net->network[i]->output = inputs[i];
+    for(int i=net->n_inputs; i<net->n_neurons; i++)   // calculate output value for each neuron
+        get_output(net->network[i], net->network);
+    int offset = net->n_neurons-net->n_outputs;
+    for(int i=0; i<net->n_outputs; i++) // set errors for output neurons
+        net->network[offset+i]->error = outputs[i] - net->network[offset+i]->output;
+    for(int i=net->n_neurons-1; i>=net->n_inputs; i--)
+        teach_neuron(net->network[i], net->network, coefficient);
+}
 
+// outputs - an array for the output data
+void get_outputs(FLOAT * inputs, FLOAT * outputs)
+{
+    for(int i=0; i<net->n_inputs; i++)  // set inputs values
+        net->network[i]->output = inputs[i];
+    for(int i=net->n_inputs; i<net->n_neurons; i++)   // calculate output value for each neuron
+        get_output(net->network[i], net->network);
+    int offset = net->n_neurons-net->n_outputs;
+    for(int i=0; i<net->n_outputs; i++) // set errors for output neurons
+        outputs[i] = net->network[offset+i]->output;
 }
