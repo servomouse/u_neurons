@@ -2,6 +2,8 @@
 #include <math.h>
 #include <stdarg.h>
 
+#define ERROR ((int)-1)
+
 FLOAT get_random(void)  // returns random value in range [-0.99; 0.99]
 {
     return 0.99 * sin(rand());
@@ -32,21 +34,27 @@ typedef struct _network_t
 
 network_t * net = NULL;
 
+typedef struct _packed_weigth_t
+{
+    int index; 
+    FLOAT weight;
+}packed_weigth_t;
+
 typedef struct _packed_neuron_t
 {
     int size;
     int num_of_inputs;
     FLOAT bias;
-    struct{
-        int index; 
-        FLOAT weight;
-    } inputs[0];
+    packed_weigth_t inputs[0];    // the length of the array is num_of_inputs
 }packed_neuron_t;
 
 typedef struct _packed_net_t
 {
-    int number_of_neurons;
-    packed_neuron_t net[0];
+    int total_size;
+    int num_of_inputs;          // number of the dummy input neurons
+    int num_of_neurons;         // total number of the useful neurons in the network
+    int num_of_outputs;         // number of the neurons in the output layer
+    packed_neuron_t net[0];     // the length of the array is num_of_neurons
 }packed_net_t;
 
 static neuron_t * create_neuron(int num_of_inputs, int first_input_index)
@@ -64,6 +72,24 @@ static neuron_t * create_neuron(int num_of_inputs, int first_input_index)
         n->inputs[i] = first_input_index + i;   // set inputs indexes
     }
     n->bias = get_random();
+    return n;
+}
+
+static neuron_t * restore_neuron(FLOAT bias, int num_of_inputs, packed_weigth_t *inputs)
+{
+    neuron_t *n = (neuron_t *)malloc(sizeof(neuron_t));
+    n->num_of_inputs = num_of_inputs;
+    n->inputs = (int*)malloc(sizeof(int)*num_of_inputs);
+    n->i_values = (FLOAT*)malloc(sizeof(FLOAT)*num_of_inputs);
+    n->weights = (FLOAT*)malloc(sizeof(FLOAT)*num_of_inputs);
+    n->w_deltas = (FLOAT*)malloc(sizeof(FLOAT)*num_of_inputs);
+
+    for(int i=0; i<num_of_inputs; i++)
+    {
+        n->weights[i] = inputs[i].weight;
+        n->inputs[i] = inputs[i].index;
+    }
+    n->bias = bias;
     return n;
 }
 
@@ -132,6 +158,7 @@ void create_network(int n_layers, ...)
     }
     net->n_inputs = layers[0];
     va_end(ptr);
+    printf("%d, %d, %d\n", layers[0], layers[1], layers[2]);
     net->network = (neuron_t**)malloc(sizeof(neuron_t*) * net->n_neurons);
     net->outputs = (FLOAT*)malloc(sizeof(FLOAT) * net->n_outputs);
     int index = 0, pointer = 0;
@@ -143,6 +170,7 @@ void create_network(int n_layers, ...)
             net->network[pointer++] = create_neuron(layers[i-1], index);
         index += layers[i-1];
     }
+    printf("%d, %d, %d\n", net->n_inputs, net->n_outputs, net->n_neurons);
 }
 
 // params: inputs - input data;
@@ -172,17 +200,75 @@ void get_outputs(FLOAT * inputs, FLOAT * outputs)
         outputs[i] = net->network[offset+i]->output;
 }
 
+// p = (int*)((size_t)p + 4);
 int store_network(char * filename)
 {
+    // calculate the required size
+    int size = sizeof(packed_net_t);
+    size += sizeof(packed_neuron_t) * (net->n_neurons - net->n_inputs);
+    for(int i=net->n_inputs; i<net->n_neurons; i++)
+        size += net->network[i]->num_of_inputs * (sizeof(int) + sizeof(FLOAT));
+    
+    // pack the network:
+    packed_net_t *zip = (packed_net_t *)malloc(size);
+    zip->total_size = size;
+    zip->num_of_neurons = net->n_neurons - net->n_inputs;
+    zip->num_of_inputs = net->n_inputs;
+    zip->num_of_outputs = net->n_outputs;
+    packed_neuron_t *current = &zip->net[0];
+    for(int i=0; i<zip->num_of_neurons; i++)
+    {
+        int n_inputs = net->network[net->n_inputs+i]->num_of_inputs;
+        int temp_size = sizeof(int) + sizeof(FLOAT);
+        temp_size *= n_inputs;
+        temp_size += sizeof(packed_neuron_t);
+        current->size =  temp_size;
+        current->num_of_inputs = n_inputs;
+        current->bias = net->network[net->n_inputs+i]->bias;
+        for(int j=0; j<n_inputs; j++)
+        {
+            current->inputs->index = net->network[net->n_inputs+i]->inputs[j];
+            current->inputs->weight = net->network[net->n_inputs+i]->weights[j];
+        }
+        current = (packed_neuron_t*)((size_t)current + temp_size);
+    }
+
     FILE *file = fopen(filename, "wb");
-    fwrite(net, sizeof(net), 1, file);
+    fwrite(zip, size, 1, file);
     return 0;
 }
 
 int restore_network(char * filename)
 {
-    uint8_t buffer[10];
+    packed_net_t meta;    // network metadata
     FILE *file = fopen(filename, "rb");
-    fread(buffer, sizeof(buffer), 1, file);
+    fread(&meta, sizeof(meta), 1, file);
+    // allocate space for th network
+    packed_neuron_t * arr = (packed_neuron_t *)malloc(meta.total_size);
+    if(NULL == arr)
+        return ERROR;
+
+    fread(arr, meta.total_size, 1, file);    // read the compressed network
+
+    if(net != NULL) // check if the network is already allocated
+        return ERROR;
+    net = (network_t*)calloc(sizeof(network_t), 1);
+    net->n_inputs = meta.num_of_inputs;
+    net->n_outputs = meta.num_of_outputs;
+    net->n_neurons = meta.num_of_inputs + meta.num_of_neurons;
+    printf("%d, %d, %d\n", net->n_inputs, net->n_outputs, net->n_neurons);
+    net->network = (neuron_t**)malloc(sizeof(neuron_t*) * net->n_neurons);
+    net->outputs = (FLOAT*)malloc(sizeof(FLOAT) * net->n_outputs);
+    int i = 0;
+    for(i; i<net->n_inputs; i++)    // create input neurons
+        net->network[i] = create_neuron(0, 0);
+
+    packed_neuron_t *current = &meta.net[0];
+    for(i; i<net->n_neurons; i++)   // restore useful neurons
+    {
+        net->network[i] = restore_neuron(current->bias, current->num_of_inputs, current->inputs);
+        current = (packed_neuron_t*)((size_t)current + current->size);
+    }
+
     return 0;
 }
