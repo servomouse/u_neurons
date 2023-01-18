@@ -8,6 +8,8 @@
 #define FLOAT float
 // #define FLOAT double
 
+// returns random value in range [-0.99; 0.99]
+FLOAT get_random(void);
 
 void create_network(int n_layers, ...);
 

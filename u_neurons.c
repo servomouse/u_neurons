@@ -32,6 +32,23 @@ typedef struct _network_t
 
 network_t * net = NULL;
 
+typedef struct _packed_neuron_t
+{
+    int size;
+    int num_of_inputs;
+    FLOAT bias;
+    struct{
+        int index; 
+        FLOAT weight;
+    } inputs[0];
+}packed_neuron_t;
+
+typedef struct _packed_net_t
+{
+    int number_of_neurons;
+    packed_neuron_t net[0];
+}packed_net_t;
+
 static neuron_t * create_neuron(int num_of_inputs, int first_input_index)
 {
     neuron_t *n = (neuron_t *)malloc(sizeof(neuron_t));
@@ -153,4 +170,19 @@ void get_outputs(FLOAT * inputs, FLOAT * outputs)
     int offset = net->n_neurons-net->n_outputs;
     for(int i=0; i<net->n_outputs; i++) // set errors for output neurons
         outputs[i] = net->network[offset+i]->output;
+}
+
+int store_network(char * filename)
+{
+    FILE *file = fopen(filename, "wb");
+    fwrite(net, sizeof(net), 1, file);
+    return 0;
+}
+
+int restore_network(char * filename)
+{
+    uint8_t buffer[10];
+    FILE *file = fopen(filename, "rb");
+    fread(buffer, sizeof(buffer), 1, file);
+    return 0;
 }
