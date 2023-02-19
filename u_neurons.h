@@ -16,8 +16,8 @@ void delete_network(void * net);
 
 
 void clear_deltas(void);
-void train_network(FLOAT * inputs, FLOAT * outputs);
-void update_network(FLOAT coefficient, void *network);
+void train_network(void *network, FLOAT * inputs, FLOAT * outputs);
+void update_network(void *network, FLOAT coefficient);
 
 // calculate the outputs array for the provied inputs array
 void get_outputs(FLOAT * inputs, FLOAT * outputs, void *network);
