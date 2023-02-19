@@ -11,18 +11,19 @@
 // returns random value in range [-0.99; 0.99]
 FLOAT get_random(void);
 
-void create_network(int n_layers, ...);
+void * create_network(int n_layers, ...);
+void delete_network(void * net);
 
 
-void train_network(FLOAT * inputs, FLOAT * outputs, FLOAT coefficient);
+void clear_deltas(void);
+void train_network(FLOAT * inputs, FLOAT * outputs);
+void update_network(FLOAT coefficient, void *network);
 
 // calculate the outputs array for the provied inputs array
-void get_outputs(FLOAT * inputs, FLOAT * outputs);
+void get_outputs(FLOAT * inputs, FLOAT * outputs, void *network);
 
- // returns either -1 in case of error or 0 if the network stored successfully
-int store_network(char * filename);
+void store_network(char * filename, void * n);
 
- // returns either -1 in case of error or 0 if the network restored successfully
-int restore_network(char * filename);
+void * restore_network(char * filename);
 
 
