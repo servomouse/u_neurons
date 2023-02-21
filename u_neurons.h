@@ -15,7 +15,7 @@ void * create_network(int n_layers, ...);
 void delete_network(void * net);
 
 
-void clear_deltas(void);
+void clear_network(void *network);
 void train_network(void *network, FLOAT * inputs, FLOAT * outputs);
 void update_network(void *network, FLOAT coefficient);
 
