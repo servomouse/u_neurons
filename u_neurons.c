@@ -335,6 +335,7 @@ typedef struct __attribute__((packed))
     int n_inputs;       // number of input neurons
     int n_outputs;      // size of the outputs array
     int n_neurons;      // total amount of neurons in the network
+    int inputs_array_size;
     int train_counter;
     neuron_t neuron[0];
 }network_t;
@@ -345,7 +346,7 @@ void create_weight(int source_neuron, int dest_neuron, void * network)
     int index;
     for(int i=0; i<MAX_NEURON_INPUTS_NUMBER; i++)
     {
-        if(-1 == net->neuron[dest_neuron].inputs[source_neuron].index)
+        if(-1 == net->neuron[dest_neuron].inputs[i].index)
         {
             index = i;
             break;
@@ -354,8 +355,9 @@ void create_weight(int source_neuron, int dest_neuron, void * network)
     if(index < MAX_NEURON_INPUTS_NUMBER)
     {
         net->neuron[dest_neuron].inputs[index].weight = 0.1 * get_random();
-        net->neuron[dest_neuron].inputs[index].index = dest_neuron;
+        net->neuron[dest_neuron].inputs[index].index = source_neuron;
     }
+    printf("created_weight src: %d, dst: %d, index:%d, weight: %f\n", source_neuron, dest_neuron, index, net->neuron[dest_neuron].inputs[index].weight);
 }
 
 void *create_network(int n_layers, ...)
@@ -390,6 +392,7 @@ void *create_network(int n_layers, ...)
     net->n_inputs = layers[0];
     net->n_neurons = n_total;
     net->n_outputs = layers[n_layers-1];
+    net->inputs_array_size = MAX_NEURON_INPUTS_NUMBER;
     for(int i=0; i<n_total; i++)    // mark all the indexes as unused
     {
         for(int j=0; j<MAX_NEURON_INPUTS_NUMBER; j++)
@@ -405,21 +408,25 @@ void *create_network(int n_layers, ...)
         {
             for(int src=0; src<layers[i-1]; src++)
             {
-                create_weight(neuron+dest, first_input+src, net);
+                create_weight(first_input+src, neuron+dest, net);
             }
+            net->neuron[i].bias = 0.1 * get_random();
+            printf("bias: %f\n", net->neuron[i].bias);
         }
         first_input = neuron;
-        neuron = layers[i];
+        neuron += layers[i];
     }
     printf("network created\n");
     return net;
 }
 
+// free memory previously allocated for network
 void delete_network(void * net)
 {
     free(net);
 }
 
+// store network to file
 void store_network(char * filename, void * n)
 {
     network_t *net = (network_t*)n;
@@ -428,6 +435,7 @@ void store_network(char * filename, void * n)
     fclose(file);
 }
 
+// restore network from file
 void * restore_network(char * filename)
 {
     int net_size;
@@ -442,16 +450,18 @@ void * restore_network(char * filename)
     return net;
 }
 
+// calculate the output for the specific neuron
 static FLOAT get_output(neuron_t *n, network_t *net)
 {
     n->sum = 0;
     n->output = 0;
     n->error = 0;
-    input_t *inputs = &net->inputs[n->inputs_off];
-    for(int i=0; i<n->n_inputs; i++)
+    for(int i=0; i<net->inputs_array_size; i++)
     {
-        inputs[i].value = net->neuron[inputs[i].index].output;
-        n->sum += inputs[i].value * inputs[i].weight;
+        if(-1 == n->inputs[i].index)
+            break;
+        n->inputs[i].value = net->neuron[n->inputs[i].index].output;
+        n->sum += n->inputs[i].value * n->inputs[i].weight;
     }
     n->sum += n->bias;
     n->output = tanh(n->sum);
@@ -463,7 +473,7 @@ void get_outputs(FLOAT * inputs, FLOAT * outputs, void *network)
 {
     network_t *n = (network_t*)network;
     for(int i=0; i<n->n_inputs; i++)  // set inputs values
-        n->neuron[i].output = inputs[i];
+        n->neuron[i].output = 0.5 * inputs[i];
     for(int i=n->n_inputs; i<n->n_neurons; i++)   // calculate output value for each neuron
         get_output(&n->neuron[i], n);
     int offset = n->n_neurons - n->n_outputs;
@@ -471,37 +481,54 @@ void get_outputs(FLOAT * inputs, FLOAT * outputs, void *network)
         outputs[i] = n->neuron[offset+i].output;
 }
 
+void print_weights(network_t * net)
+{
+    for(int i=0; i<net->n_neurons; i++)
+    {
+        printf("neuron %d weights: ", i);
+        for(int j=0; j<net->inputs_array_size; j++)
+        {
+            if(-1 == net->neuron[i].inputs[j].index)
+                break;
+            printf("\t%d: %f ", j, net->neuron[i].inputs[j].weight);
+        }
+        printf("\n");
+    }
+}
+
 void update_network(void *network, FLOAT coefficient)
 {
     network_t *net = (network_t*)network;
     neuron_t * neuron;
     input_t * inputs;
-    for(int i=net->n_neurons-1; i>=net->n_inputs; i--)
+    for(int i=net->n_inputs; i<net->n_neurons; i++)
     {
         neuron = &net->neuron[i];
-        inputs = &net->inputs[net->neuron[i].inputs_off];
 
-        neuron->bias -= coefficient * (neuron->b_error / net->train_counter);
-        printf("neuron %d weights: ", i);
-        for(int j=0; j<neuron->n_inputs; j++)
+        neuron->bias += coefficient * (neuron->b_error / net->train_counter);
+        inputs = net->neuron[i].inputs;
+        for(int j=0; j<net->inputs_array_size; j++)
         {
-            inputs[j].weight -= coefficient * (inputs[j].w_error / net->train_counter);
-            printf("%f, ", inputs[j].weight);
+            if(-1 == inputs[j].index)
+                break;
+            inputs[j].weight += coefficient * (inputs[j].w_error / net->train_counter);
         }
-        printf("\n");
     }
+    // print_weights(net);
 }
 
 static void train_neuron(neuron_t *n, network_t *net)
 {
     n->error *= (1 - pow(tanh(n->sum), 2));    // get bias error
     n->b_error += n->error;
-    input_t * inputs = &net->inputs[n->inputs_off];
-    
-    for(int i=0; i<n->n_inputs; i++)
+    for(int i=0; i<net->inputs_array_size; i++)
     {
-        inputs[i].w_error += n->error * inputs[i].value;
-        net->neuron[inputs[i].index].error += n->error * inputs[i].weight;   // set error for each connected neuron
+        if(-1 == n->inputs[i].index)
+            break;
+        n->inputs[i].w_error += n->error * n->inputs[i].value;
+
+        // set error for each connected neuron
+        net->neuron[n->inputs[i].index].error += n->error * n->inputs[i].weight;
     }
 }
 
@@ -512,7 +539,7 @@ void train_network(void *network, FLOAT * inputs, FLOAT * outputs)
     network_t *net = (network_t*)network;
     // set inputs values
     for(int i=0; i<net->n_inputs; i++)
-        net->neuron[i].output = inputs[i];
+        net->neuron[i].output = 0.5 * inputs[i];
     // calculate output value for each neuron
     for(int i=net->n_inputs; i<net->n_neurons; i++)
         get_output(&net->neuron[i], net);
@@ -523,7 +550,7 @@ void train_network(void *network, FLOAT * inputs, FLOAT * outputs)
     // set errors for output neurons
     int offset = net->n_neurons - net->n_outputs;
     for(int i=0; i<net->n_outputs; i++)
-        net->neuron[offset+i].error = 2 * (net->neuron[offset+i].output - outputs[i]);
+        net->neuron[offset+i].error = 2 * (outputs[i] - net->neuron[offset+i].output);
     for(int i=net->n_neurons-1; i>=net->n_inputs; i--)
         train_neuron(&net->neuron[i], net);
     net->train_counter++;
@@ -533,15 +560,18 @@ void train_network(void *network, FLOAT * inputs, FLOAT * outputs)
 void clear_network(void *network)
 {
     network_t *net = (network_t*)network;
-    for(int i=net->n_neurons-1; i>=net->n_inputs; i--)
+    for(int i=0; i<net->n_neurons; i++)
     {
         net->neuron[i].b_error = 0;
         net->neuron[i].sum = 0;
         net->neuron[i].output = 0;
-        input_t * inputs = &net->inputs[net->neuron[i].inputs_off];
         
-        for(int i=0; i<net->neuron[i].n_inputs; i++)
-            inputs[i].w_error = 0;  // weight error = 0
+        for(int j=0; j<net->inputs_array_size; j++)
+        {
+            if(-1 == net->neuron[i].inputs[i].index)
+                break;
+            net->neuron[i].inputs[i].w_error = 0;  // weight error = 0
+        }
     }
     net->train_counter = 0;
 }
