@@ -309,6 +309,8 @@ int restore_network(char * filename)
 
 #else
 
+#define MAX_NEURON_INPUTS_NUMBER    100 // how many inputs each neuron can has
+
 typedef struct __attribute__((packed))
 {
     int index;      // input index in the neurons table
@@ -319,41 +321,40 @@ typedef struct __attribute__((packed))
 
 typedef struct __attribute__((packed))
 {
-    int n_inputs;   // number of inputs for this neuron
     FLOAT bias;     // the bias itself
     FLOAT b_error;  // bias error
     FLOAT sum;      // bias + sum(inpit[i] * weight[i] for i in [offset ... offset+n_inputs])
     FLOAT error;
     FLOAT output;
-    int inputs_off; // offset in the shared inputs array
+    input_t inputs[MAX_NEURON_INPUTS_NUMBER];
 }neuron_t;
 
 typedef struct __attribute__((packed))
 {
-    int size;           // total size in bytes, needed to correctly store the network
-    int inputs_size;    // size of the inputs array
+    int size;           // total size in bytes, need to correctly store and restore network
     int n_inputs;       // number of input neurons
     int n_outputs;      // size of the outputs array
     int n_neurons;      // total amount of neurons in the network
     int train_counter;
-    input_t* inputs;    // shared inputs array
     neuron_t neuron[0];
 }network_t;
 
-static void create_neuron(neuron_t * p, input_t* inputs, int i_off, int n_inputs, int offset)
+void create_weight(int source_neuron, int dest_neuron, void * network)
 {
-    p->n_inputs = n_inputs;
-    p->b_error = 0;
-    p->bias = 0.1 * get_random();
-    p->sum = 0;
-    p->output = 0;
-    p->inputs_off = i_off;
-    for(int i=0; i<n_inputs; i++)
+    network_t *net = (network_t*)network;
+    int index;
+    for(int i=0; i<MAX_NEURON_INPUTS_NUMBER; i++)
     {
-        inputs[i_off+i].index = offset + i;
-        inputs[i_off+i].value = 0;
-        inputs[i_off+i].w_error = 0;
-        inputs[i_off+i].weight = 0.1 * get_random();
+        if(-1 == net->neuron[dest_neuron].inputs[source_neuron].index)
+        {
+            index = i;
+            break;
+        }
+    }
+    if(index < MAX_NEURON_INPUTS_NUMBER)
+    {
+        net->neuron[dest_neuron].inputs[index].weight = 0.1 * get_random();
+        net->neuron[dest_neuron].inputs[index].index = dest_neuron;
     }
 }
 
@@ -382,29 +383,33 @@ void *create_network(int n_layers, ...)
     printf("output layer: \t %d outputs\n", layers[n_layers-1]);
 
     // create network
-    network_t *net = (network_t*)malloc(sizeof(network_t) + n_total * sizeof(neuron_t));
-    // create inputs array
-    net->inputs_size = inputs_arr_size * sizeof(input_t);
-    net->inputs = (input_t*)malloc(net->inputs_size);
+    int net_size = sizeof(network_t) + n_total * sizeof(neuron_t);
+    network_t *net = (network_t*)calloc(net_size, 1);
 
-    net->size = sizeof(network_t) + n_total * sizeof(neuron_t);
+    net->size = net_size;
     net->n_inputs = layers[0];
     net->n_neurons = n_total;
     net->n_outputs = layers[n_layers-1];
-
-    // create inputs
-    for(int i=0; i<layers[0]; i++)
-        create_neuron(&net->neuron[i], NULL, 0, 0, 0);  // create simple input neurons
+    for(int i=0; i<n_total; i++)    // mark all the indexes as unused
+    {
+        for(int j=0; j<MAX_NEURON_INPUTS_NUMBER; j++)
+            net->neuron[i].inputs[j].index = -1;
+    }
     
     // create the rest of the network
-    int i_off = 0;          // index in the inputs array
-    int n_ind = layers[0];  // current neuron index
-    int inputs_offset = 0;  // index of the first input neuron
+    int neuron = layers[0];     // the first neuron in the current layer
+    int first_input = 0;        // index of the first source neuron
     for(int i=1; i<n_layers; i++)
     {
-        for(int j=0; j<layers[i]; j++)
-            create_neuron(&net->neuron[n_ind++], net->inputs, i_off++, layers[i-1], inputs_offset);
-        inputs_offset += layers[i-1];
+        for(int dest=0; dest<layers[i]; dest++)
+        {
+            for(int src=0; src<layers[i-1]; src++)
+            {
+                create_weight(neuron+dest, first_input+src, net);
+            }
+        }
+        first_input = neuron;
+        neuron = layers[i];
     }
     printf("network created\n");
     return net;
@@ -412,9 +417,7 @@ void *create_network(int n_layers, ...)
 
 void delete_network(void * net)
 {
-    network_t *n = (network_t*)net;
-    free(n->inputs);
-    free(n);
+    free(net);
 }
 
 void store_network(char * filename, void * n)
@@ -422,21 +425,18 @@ void store_network(char * filename, void * n)
     network_t *net = (network_t*)n;
     FILE *file = fopen(filename, "wb");
     fwrite(net, net->size, 1, file);
-    fwrite(net->inputs, net->inputs_size, 1, file);
     fclose(file);
 }
 
 void * restore_network(char * filename)
 {
-    struct{int net_size; int inputs_size;}meta;
+    int net_size;
     FILE *file = fopen(filename, "rb");
-    fread(&meta, sizeof(meta), 1, file);
+    fread(&net_size, sizeof(net_size), 1, file);
     // allocate space for the network
-    network_t *net = (network_t*)malloc(meta.net_size);
-    net->inputs = (input_t*)malloc(meta.inputs_size);
+    network_t *net = (network_t*)malloc(net_size);
     rewind(file);
-    fread(net, meta.net_size, 1, file);
-    fread(net->inputs, meta.inputs_size, 1, file);
+    fread(net, net_size, 1, file);
     fclose(file);
 
     return net;
