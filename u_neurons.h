@@ -18,6 +18,11 @@ void delete_network(void * net);
 void clear_network(void *network);
 void train_network(void *network, FLOAT * inputs, FLOAT * outputs);
 void update_network(void *network, FLOAT coefficient);
+void print_network(void *network);
+
+// evolution funcs:
+void change_random_weight(void *network);
+void undo_changes(void * network);
 
 // calculate the outputs array for the provied inputs array
 void get_outputs(FLOAT * inputs, FLOAT * outputs, void *network);
