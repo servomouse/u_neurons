@@ -15,7 +15,7 @@ int get_random_from_interval(int a1, int a2)
     return a1 + (rand()%temp);
 }
 
-#define MAX_NEURON_INPUTS_NUMBER    100 // how many inputs each neuron can has
+#define MAX_NEURON_INPUTS_NUMBER    512 // how many inputs each neuron can has
 
 typedef struct __attribute__((packed))
 {
@@ -100,7 +100,7 @@ void create_weight(int source_neuron, int dest_neuron, void * network)
         net->neuron[dest_neuron].inputs[index].weight = 0.1 * get_random();
         net->neuron[dest_neuron].inputs[index].index = source_neuron;
     }
-    printf("created_weight src: %d, dst: %d, index:%d, weight: %f\n", source_neuron, dest_neuron, index, net->neuron[dest_neuron].inputs[index].weight);
+    // printf("created_weight src: %d, dst: %d, index:%d, weight: %f\n", source_neuron, dest_neuron, index, net->neuron[dest_neuron].inputs[index].weight);
 }
 
 void *create_network(int n_layers, ...)
@@ -114,6 +114,11 @@ void *create_network(int n_layers, ...)
     for (int i = 0; i < n_layers; i++)
     {
         layers[i] = va_arg(ptr, int);
+        if(layers[i] > MAX_NEURON_INPUTS_NUMBER)
+        {
+            printf("ERROR: layer size exceed the MAX_NEURON_INPUTS_NUMBER!!\n");
+            exit(EXIT_FAILURE);
+        }
         n_total += layers[i];
         if(i>0)
             inputs_arr_size += layers[i] * layers[i-1];
@@ -129,6 +134,7 @@ void *create_network(int n_layers, ...)
 
     // create network
     int net_size = sizeof(network_t) + n_total * sizeof(neuron_t);
+    printf("network size: %d\n", net_size);
     network_t *net = (network_t*)calloc(net_size, 1);
 
     net->size = net_size;
@@ -154,7 +160,7 @@ void *create_network(int n_layers, ...)
                 create_weight(first_input+src, neuron+dest, net);
             }
             net->neuron[i].bias = 0.1 * get_random();
-            printf("bias: %f\n", net->neuron[i].bias);
+            // printf("bias: %f\n", net->neuron[i].bias);
         }
         first_input = neuron;
         neuron += layers[i];
@@ -329,9 +335,9 @@ void clear_network(void *network)
         
         for(int j=0; j<net->inputs_array_size; j++)
         {
-            if(-1 == net->neuron[i].inputs[i].index)
+            if(-1 == net->neuron[i].inputs[j].index)
                 break;
-            net->neuron[i].inputs[i].w_error = 0;  // weight error = 0
+            net->neuron[i].inputs[j].w_error = 0;  // weight error = 0
         }
     }
     net->train_counter = 0;

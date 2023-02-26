@@ -5,50 +5,33 @@
 #include <math.h>
 
 #include "u_neurons.h"
+#include "candles_float.h"
 
 #define CREATE
 
+#define INPUT_WIDTH     4 * 10
+#define CANDLES_SIZE    10000
+
 void get_values(float *ins, float *expects)
 {
-    // ins[0] = get_random();
-    // ins[1] = get_random();
-
-    // if(ins[0] > ins[1])
-    //     expects[0] = 1;
-    // else
-    //     expects[0] = -1;
-    static int temp = 0;
-    if(temp == 0)
+    int base = 10000 + rand()%CANDLES_SIZE;
+    for(int i=0, j=0; j<INPUT_WIDTH; i++, j+=4)
     {
-        float base = rand()%10000;
-        ins[0] = sin(base);
-        printf("values: %f, ", base);
-        base += 0.1;
-        ins[1] = sin(base);
-        printf("%f, ", base);
-        base += 0.1;
-        expects[0] = sin(base);
-        printf("%f\n", base);
-        temp = 1;
+        ins[j] = candles[base + i][0];
+        ins[j+1] = candles[base + i][1];
+        ins[j+2] = candles[base + i][2];
+        ins[j+3] = candles[base + i][3];
     }
-    else
-    {
-        float base = rand()%10000;
-        ins[0] = sin(base);
-        base += 0.1;
-        ins[1] = sin(base);
-        base += 0.1;
-        expects[0] = sin(base);
-    }
+    expects[0] = candles[base + (INPUT_WIDTH/4)][3];
 }
 
 float get_average_error(void *net, float *outs)
 {
-    float ins[2];
+    float ins[INPUT_WIDTH];
     float expects[1];
     float error = 0;
     int error_count = 0;
-    for(int j=0; j<100000; j++)
+    for(int j=0; j<1000; j++)
     {
         get_values(ins, expects);
 
@@ -61,20 +44,26 @@ float get_average_error(void *net, float *outs)
 
 void get_outputs_csv(void *net, float *outs)
 {
-    float ins[2];
+    float ins[INPUT_WIDTH];
     float expects[1];
     float error = 0;
     int error_count = 0;
     FILE *file = fopen("outputs.csv", "wb");
-    for(float j=-3; j<3; j+=0.1)
+    for(int m=0; m<30; m++)
     {
-        ins[0] = sin(j);
-        ins[1] = sin(j+0.1);
-        expects[0] = sin(j+0.2);
+        int base = 10000 + rand()%CANDLES_SIZE;
+        for(int i=0, j=0; j<INPUT_WIDTH; i++, j+=4)
+        {
+            ins[j] = candles[base + i][0];
+            ins[j+1] = candles[base + i][1];
+            ins[j+2] = candles[base + i][2];
+            ins[j+3] = candles[base + i][3];
+        }
+        expects[0] = candles[base + (INPUT_WIDTH/4)][3];
 
         get_outputs(ins, outs, net);
         char str[128] = {0};
-        int len = sprintf(str, "%f; %f; %f;\n", j, expects[0], outs[0]);
+        int len = sprintf(str, "%d; %f; %f;\n", m, expects[0], outs[0]);
         fwrite(str, len, 1, file);
         // printf("%f; %f;\n", expects[0], outs[0]);
     }
@@ -116,18 +105,17 @@ void evolution(void * network)
 int main(void)  // create, train and store
 {
     srand((unsigned int)time(NULL));
-    // void * net = create_network(5, 2, 32, 32, 16, 1);
-    void * net = restore_network("network.dat");
+    void * net = create_network(6, INPUT_WIDTH, 512, 512, 512, 16, 1);
+    // void * net = restore_network("network.dat");
     // evolution(net);
     // return 0;
-    float ins[2];
+    float ins[INPUT_WIDTH];
     float outs[1];
     float expects[1];
     float error = 0;
     clear_network(net);
-    // print_network(net);
     float min_error = get_average_error(net, outs);
-    float train_coeff = 1;
+    // float train_coeff = 1;
     
     for(int i=0; i<20000001; i++)
     {
@@ -144,16 +132,14 @@ int main(void)  // create, train and store
             }
 
             error = get_average_error(net, outs);
-            printf("inputs: %f, %f,", ins[0], ins[1]);
-            printf("\texpects: %f", expects[0]);
-            printf("\toutput: %f,", outs[0]);
+            printf("minimal error: %f,", min_error);
             printf("\taverage error: %f\n", error);
             if(error < min_error)
             {
-                store_network("network.dat", net);
-                // print_network(net);
                 min_error = error;
             }
+            store_network("network.dat", net);
+            get_outputs_csv(net, outs);
             // printf("output: %f,\taverage error: %f\n", outs[0], error/error_count);
 
             if(error < 0.0001)
@@ -163,7 +149,7 @@ int main(void)  // create, train and store
             }
         }
     }
-    get_outputs_csv(net, outs);
+    // get_outputs_csv(net, outs);
 
     // store_network("network.dat", net);
     // delete_network(net);
