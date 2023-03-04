@@ -41,12 +41,13 @@ def minimal():
 def full():
     with open(f'candles_ETHUSDT_1H.dat') as data:
         candles = json.load(data)
-        for i in range(len(candles)):
+        for i in range(1, len(candles)):
             temp = []
             temp.append(float_to_string(10 * ((candles[i]["open"]  / candles[i-1]["close"]) - 1)))
             temp.append(float_to_string(10 * ((candles[i]["high"]  / candles[i]["open"]) - 1)))
             temp.append(float_to_string(10 * ((candles[i]["low"]   / candles[i]["open"]) - 1)))
             temp.append(float_to_string(10 * ((candles[i]["close"] / candles[i]["open"]) - 1)))
+            temp.append(float_to_string(10 * ((candles[i]["close"] / candles[i-1]["close"]) - 1)))
             vals.append(temp)
 
         with open(f'candles_float.h', 'w') as outfile:

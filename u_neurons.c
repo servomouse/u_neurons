@@ -15,7 +15,7 @@ int get_random_from_interval(int a1, int a2)
     return a1 + (rand()%temp);
 }
 
-#define MAX_NEURON_INPUTS_NUMBER    512 // how many inputs each neuron can has
+#define MAX_NEURON_INPUTS_NUMBER    1024 // how many inputs each neuron can has
 
 typedef struct __attribute__((packed))
 {
@@ -46,10 +46,6 @@ typedef struct __attribute__((packed))
     neuron_t neuron[0];
 }network_t;
 
-int neuron = 0;
-int weight = 0;
-FLOAT prev_value = 0;
-
 int pick_neuron(network_t *net)
 {
     return get_random_from_interval(net->n_inputs, net->n_neurons);
@@ -68,19 +64,43 @@ int pick_weight(network_t *net, neuron_t *n)
     return get_random_from_interval(0, num_of_weights);
 }
 
-void change_random_weight(void *network)
+void change_random_weight(void *network, pre_val_t * prev_value)
 {
     network_t *net = (network_t*)network;
-    neuron = pick_neuron(net);
-    weight = pick_weight(net, &net->neuron[neuron]);
-    prev_value = net->neuron[neuron].inputs[weight].weight;
-    net->neuron[neuron].inputs[weight].weight += tanh(prev_value + 0.1 * get_random());
+
+    int n = pick_neuron(net);
+    int weight;
+    FLOAT val;
+
+    if(get_random() < 0.75)
+    {
+        weight = pick_weight(net, &net->neuron[n]);
+        val = net->neuron[n].inputs[weight].weight;
+        net->neuron[n].inputs[weight].weight = tanh(val + get_random());
+        prev_value->type = WEIGHT;
+    }
+    else
+    {
+        val = net->neuron[n].bias;
+        net->neuron[n].bias = tanh(val + get_random());
+        prev_value->type = BIAS;
+    }
+
+    prev_value->neuron = n;
+    prev_value->weight = weight;
+    prev_value->prev_value = val;
 }
 
-void undo_changes(void * network)
+void undo_changes(void * network, pre_val_t * prev_value)
 {
     network_t *net = (network_t*)network;
-    net->neuron[neuron].inputs[weight].weight = prev_value;
+    int n = prev_value->neuron;
+    int weight = prev_value->weight;
+    FLOAT val = prev_value->prev_value;
+    if(prev_value->type == WEIGHT)
+        net->neuron[n].inputs[weight].weight = val;
+    else
+        net->neuron[n].bias = val;
 }
 
 void create_weight(int source_neuron, int dest_neuron, void * network)
@@ -176,9 +196,9 @@ void delete_network(void * net)
 }
 
 // store network to file
-void store_network(char * filename, void * n)
+void store_network(char * filename, void * network)
 {
-    network_t *net = (network_t*)n;
+    network_t *net = (network_t*)network;
     FILE *file = fopen(filename, "wb");
     fwrite(net, net->size, 1, file);
     fclose(file);
@@ -197,6 +217,18 @@ void * restore_network(char * filename)
     fclose(file);
 
     return net;
+}
+
+// create a clone
+void * copy_network(void * network)
+{
+    network_t *net = (network_t*)network;
+    // allocate space for the network
+    network_t *new_net = (network_t*)malloc(net->size);
+    for(int i=0; i<net->size; i++)
+        ((uint8_t*)new_net)[i] = ((uint8_t*)net)[i];
+
+    return new_net;
 }
 
 // calculate the output for the specific neuron
