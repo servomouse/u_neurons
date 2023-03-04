@@ -4,3 +4,5 @@ network.dat
 network
 
 outputs.csv
+
+*.csv
