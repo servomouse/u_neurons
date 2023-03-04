@@ -11,7 +11,7 @@
 #define CREATE
 
 #define INPUT_WIDTH     4 * 10
-#define CANDLES_SIZE    200
+#define CANDLES_SIZE    1000
 
 int get_base(void)
 {
@@ -28,7 +28,7 @@ void get_values(float *ins, float *expects, int count)
     int base = 10000 + count;
     for(int i=0, j=0; j<INPUT_WIDTH; i++, j+=4)
     {
-        ins[j] = candles[base + i][0];
+        ins[j]   = candles[base + i][0];
         ins[j+1] = candles[base + i][1];
         ins[j+2] = candles[base + i][2];
         ins[j+3] = candles[base + i][3];

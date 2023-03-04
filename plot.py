@@ -28,8 +28,8 @@ def plot1():
             if p > treshold:
                 result *= 1 + ((r / 10) - commission)
 
-    plt.plot(x, ref, color = 'g', linestyle = 'dashed',label = "Reference")
-    plt.plot(x, pred, color = 'r', linestyle = 'dashed',label = "Predictions")
+    plt.plot(x, ref, color = 'g', linestyle = 'dotted',label = "Reference")
+    plt.plot(x, pred, color = 'r', linestyle = 'solid',label = "Predictions")
 
     plt.xticks()    # rotation = 25)
     plt.xlabel(f'Effectiveness {str(effectiveness)}/{str(ef_counter)}, result: {result}')
@@ -64,8 +64,8 @@ def plot2():
             if p > treshold:
                 result *= 1 + ((r / 10) - commission)
 
-    plt.plot(x, ref, color = 'g', linestyle = 'dashed',label = "Reference")
-    plt.plot(x, pred, color = 'r', linestyle = 'dashed',label = "Predictions")
+    plt.plot(x, ref, color = 'g', linestyle = 'dotted',label = "Reference")
+    plt.plot(x, pred, color = 'r', linestyle = 'solid',label = "Predictions")
 
     plt.xticks()    # rotation = 25)
     plt.xlabel(f'Effectiveness {str(effectiveness)}/{str(ef_counter)}, result: {result}')
